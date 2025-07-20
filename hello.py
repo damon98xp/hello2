@@ -1,7 +1,9 @@
+import pygame
 import random
-import time
-import os
+import sys
 from datetime import datetime
+
+pygame.init()
 
 class Tetris:
     def __init__(self):
@@ -11,6 +13,32 @@ class Tetris:
         self.score = 0
         self.level = 1
         self.lines_cleared = 0
+        
+        # Pygame setup
+        self.cell_size = 30
+        self.board_width = self.width * self.cell_size
+        self.board_height = self.height * self.cell_size
+        self.sidebar_width = 200
+        self.screen_width = self.board_width + self.sidebar_width
+        self.screen_height = self.board_height + 100
+        
+        self.screen = pygame.display.set_mode((self.screen_width, self.screen_height))
+        pygame.display.set_caption("Tetris - Hello World!")
+        
+        # Colors
+        self.colors = [
+            (0, 0, 0),      # Empty - Black
+            (255, 0, 0),    # I - Red
+            (0, 255, 0),    # O - Green
+            (0, 0, 255),    # T - Blue
+            (255, 255, 0),  # S - Yellow
+            (255, 0, 255),  # Z - Magenta
+            (0, 255, 255),  # J - Cyan
+            (255, 128, 0),  # L - Orange
+        ]
+        
+        self.font = pygame.font.Font(None, 36)
+        self.small_font = pygame.font.Font(None, 24)
         
         # Tetris pieces (I, O, T, S, Z, J, L)
         self.pieces = [
@@ -111,6 +139,10 @@ class Tetris:
         self.current_y = 0
         self.current_rotation = 0
         
+        self.fall_time = 0
+        self.fall_speed = 500  # milliseconds
+        self.clock = pygame.time.Clock()
+        
     def get_new_piece(self):
         return random.randint(0, len(self.pieces) - 1)
     
@@ -159,38 +191,75 @@ class Tetris:
         
         if self.lines_cleared >= self.level * 10:
             self.level += 1
+            self.fall_speed = max(50, self.fall_speed - 50)
     
-    def display(self):
-        os.system('clear' if os.name == 'posix' else 'cls')
-        
-        # Create display board
-        display_board = [row[:] for row in self.board]
-        
-        # Add current piece to display
+    def draw_board(self):
+        # Draw the game board
+        for y in range(self.height):
+            for x in range(self.width):
+                color = self.colors[self.board[y][x]]
+                rect = pygame.Rect(x * self.cell_size, y * self.cell_size, 
+                                 self.cell_size, self.cell_size)
+                pygame.draw.rect(self.screen, color, rect)
+                pygame.draw.rect(self.screen, (128, 128, 128), rect, 1)
+    
+    def draw_piece(self):
+        # Draw the current falling piece
         piece = self.pieces[self.current_piece][self.current_rotation]
+        color = self.colors[self.current_piece + 1]
+        
         for y, row in enumerate(piece):
             for x, cell in enumerate(row):
                 if cell == '#':
                     board_x = self.current_x + x
                     board_y = self.current_y + y
                     if 0 <= board_y < self.height and 0 <= board_x < self.width:
-                        display_board[board_y][board_x] = self.current_piece + 1
+                        rect = pygame.Rect(board_x * self.cell_size, 
+                                         board_y * self.cell_size,
+                                         self.cell_size, self.cell_size)
+                        pygame.draw.rect(self.screen, color, rect)
+                        pygame.draw.rect(self.screen, (128, 128, 128), rect, 1)
+    
+    def draw_ui(self):
+        # Draw sidebar with game info
+        sidebar_x = self.board_width + 10
         
-        print(f"Score: {self.score}  Level: {self.level}  Lines: {self.lines_cleared}")
-        print("+" + "-" * self.width + "+")
+        # Score
+        score_text = self.font.render(f"Score: {self.score}", True, (255, 255, 255))
+        self.screen.blit(score_text, (sidebar_x, 50))
         
-        for row in display_board:
-            line = "|"
-            for cell in row:
-                if cell == 0:
-                    line += " "
-                else:
-                    line += "#"
-            line += "|"
-            print(line)
+        # Level
+        level_text = self.font.render(f"Level: {self.level}", True, (255, 255, 255))
+        self.screen.blit(level_text, (sidebar_x, 100))
         
-        print("+" + "-" * self.width + "+")
-        print("Controls: A/D - move, S - drop, W - rotate, Q - quit")
+        # Lines
+        lines_text = self.font.render(f"Lines: {self.lines_cleared}", True, (255, 255, 255))
+        self.screen.blit(lines_text, (sidebar_x, 150))
+        
+        # Controls
+        controls_y = 250
+        controls = [
+            "Controls:",
+            "←/→ - Move",
+            "↓ - Soft drop",
+            "↑ - Rotate",
+            "Space - Hard drop",
+            "ESC - Quit"
+        ]
+        
+        for i, control in enumerate(controls):
+            if i == 0:
+                text = self.font.render(control, True, (255, 255, 255))
+            else:
+                text = self.small_font.render(control, True, (200, 200, 200))
+            self.screen.blit(text, (sidebar_x, controls_y + i * 25))
+        
+        # Date and time at bottom
+        datetime_text = self.small_font.render(
+            datetime.now().strftime('%Y-%m-%d %H:%M:%S'), 
+            True, (150, 150, 150)
+        )
+        self.screen.blit(datetime_text, (10, self.screen_height - 30))
     
     def game_over(self):
         return not self.can_move(0, 0)
@@ -206,20 +275,68 @@ class Tetris:
         if self.can_move(0, 0, new_rotation):
             self.current_rotation = new_rotation
     
+    def handle_input(self):
+        keys = pygame.key.get_pressed()
+        
+        # Movement with key repeat delay
+        if keys[pygame.K_LEFT] and self.can_move(-1, 0):
+            self.current_x -= 1
+            pygame.time.wait(100)
+        elif keys[pygame.K_RIGHT] and self.can_move(1, 0):
+            self.current_x += 1
+            pygame.time.wait(100)
+        elif keys[pygame.K_DOWN] and self.can_move(0, 1):
+            self.current_y += 1
+            pygame.time.wait(50)
+    
     def run(self):
-        print("Welcome to Console Tetris!")
-        print("Starting in 3 seconds...")
-        time.sleep(3)
+        # Show welcome message
+        self.screen.fill((0, 0, 0))
+        welcome_text = self.font.render("Hello, World!", True, (255, 255, 255))
+        welcome_rect = welcome_text.get_rect(center=(self.screen_width//2, self.screen_height//2 - 50))
+        self.screen.blit(welcome_text, welcome_rect)
         
-        fall_time = 0
-        fall_speed = max(1, 11 - self.level)
+        tetris_text = self.font.render("Welcome to Pygame Tetris!", True, (255, 255, 255))
+        tetris_rect = tetris_text.get_rect(center=(self.screen_width//2, self.screen_height//2))
+        self.screen.blit(tetris_text, tetris_rect)
         
-        while not self.game_over():
-            self.display()
+        start_text = self.small_font.render("Press any key to start...", True, (200, 200, 200))
+        start_rect = start_text.get_rect(center=(self.screen_width//2, self.screen_height//2 + 50))
+        self.screen.blit(start_text, start_rect)
+        
+        pygame.display.flip()
+        
+        # Wait for key press to start
+        waiting = True
+        while waiting:
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    pygame.quit()
+                    sys.exit()
+                elif event.type == pygame.KEYDOWN:
+                    waiting = False
+        
+        # Main game loop
+        running = True
+        while running and not self.game_over():
+            dt = self.clock.tick(60)
+            self.fall_time += dt
             
-            # Simulate automatic falling
-            fall_time += 1
-            if fall_time >= fall_speed:
+            # Handle events
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT or (event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE):
+                    running = False
+                elif event.type == pygame.KEYDOWN:
+                    if event.key == pygame.K_UP:
+                        self.rotate_piece()
+                    elif event.key == pygame.K_SPACE:
+                        self.drop_piece()
+            
+            # Handle continuous input
+            self.handle_input()
+            
+            # Automatic falling
+            if self.fall_time >= self.fall_speed:
                 if self.can_move(0, 1):
                     self.current_y += 1
                 else:
@@ -229,32 +346,49 @@ class Tetris:
                     self.current_x = self.width // 2 - 2
                     self.current_y = 0
                     self.current_rotation = 0
-                    fall_speed = max(1, 11 - self.level)
-                fall_time = 0
+                self.fall_time = 0
             
-            # Simple input simulation (auto-play demo)
-            time.sleep(0.5)
-            
-            # Random moves for demo
-            if random.random() < 0.3:
-                move = random.choice(['left', 'right', 'rotate', 'drop'])
-                if move == 'left' and self.can_move(-1, 0):
-                    self.current_x -= 1
-                elif move == 'right' and self.can_move(1, 0):
-                    self.current_x += 1
-                elif move == 'rotate':
-                    self.rotate_piece()
-                elif move == 'drop':
-                    self.drop_piece()
+            # Draw everything
+            self.screen.fill((0, 0, 0))
+            self.draw_board()
+            self.draw_piece()
+            self.draw_ui()
+            pygame.display.flip()
         
-        print(f"\nGame Over! Final Score: {self.score}")
-        print(f"Lines cleared: {self.lines_cleared}")
-        print(f"Level reached: {self.level}")
+        # Game over screen
+        if self.game_over():
+            self.screen.fill((0, 0, 0))
+            game_over_text = self.font.render("Game Over!", True, (255, 0, 0))
+            game_over_rect = game_over_text.get_rect(center=(self.screen_width//2, self.screen_height//2 - 50))
+            self.screen.blit(game_over_text, game_over_rect)
+            
+            final_score_text = self.font.render(f"Final Score: {self.score}", True, (255, 255, 255))
+            score_rect = final_score_text.get_rect(center=(self.screen_width//2, self.screen_height//2))
+            self.screen.blit(final_score_text, score_rect)
+            
+            final_lines_text = self.small_font.render(f"Lines: {self.lines_cleared}  Level: {self.level}", True, (200, 200, 200))
+            lines_rect = final_lines_text.get_rect(center=(self.screen_width//2, self.screen_height//2 + 30))
+            self.screen.blit(final_lines_text, lines_rect)
+            
+            quit_text = self.small_font.render("Press ESC to quit", True, (150, 150, 150))
+            quit_rect = quit_text.get_rect(center=(self.screen_width//2, self.screen_height//2 + 80))
+            self.screen.blit(quit_text, quit_rect)
+            
+            pygame.display.flip()
+            
+            # Wait for quit
+            waiting = True
+            while waiting:
+                for event in pygame.event.get():
+                    if event.type == pygame.QUIT or (event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE):
+                        waiting = False
+        
+        pygame.quit()
 
 if __name__ == "__main__":
     print("Hello, World!")
     print(f"Current date and time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-    print("\nStarting Tetris game...")
+    print("\nStarting Pygame Tetris game...")
     
     game = Tetris()
     game.run()
