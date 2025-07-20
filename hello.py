@@ -135,6 +135,7 @@ class Tetris:
         ]
         
         self.current_piece = self.get_new_piece()
+        self.next_piece = self.get_new_piece()
         self.current_x = self.width // 2 - 2
         self.current_y = 0
         self.current_rotation = 0
@@ -145,6 +146,13 @@ class Tetris:
         
     def get_new_piece(self):
         return random.randint(0, len(self.pieces) - 1)
+    
+    def spawn_next_piece(self):
+        self.current_piece = self.next_piece
+        self.next_piece = self.get_new_piece()
+        self.current_x = self.width // 2 - 2
+        self.current_y = 0
+        self.current_rotation = 0
     
     def can_move(self, dx, dy, rotation=None):
         if rotation is None:
@@ -220,6 +228,47 @@ class Tetris:
                         pygame.draw.rect(self.screen, color, rect)
                         pygame.draw.rect(self.screen, (128, 128, 128), rect, 1)
     
+    def draw_next_piece(self):
+        sidebar_x = self.board_width + 10
+        next_y = 420
+        preview_size = 15
+        preview_width = 4 * preview_size
+        preview_height = 4 * preview_size
+        
+        # Draw "Next:" label
+        next_label = self.font.render("Next:", True, (255, 255, 255))
+        self.screen.blit(next_label, (sidebar_x, next_y - 35))
+        
+        # Draw preview box border
+        border_rect = pygame.Rect(sidebar_x - 2, next_y - 2, preview_width + 4, preview_height + 4)
+        pygame.draw.rect(self.screen, (128, 128, 128), border_rect, 2)
+        
+        # Draw background
+        bg_rect = pygame.Rect(sidebar_x, next_y, preview_width, preview_height)
+        pygame.draw.rect(self.screen, (32, 32, 32), bg_rect)
+        
+        # Draw the next piece
+        piece = self.pieces[self.next_piece][0]  # Use first rotation
+        color = self.colors[self.next_piece + 1]
+        
+        # Calculate offset to center the piece in preview box
+        piece_width = len(piece[0]) * preview_size
+        piece_height = len(piece) * preview_size
+        offset_x = (preview_width - piece_width) // 2
+        offset_y = (preview_height - piece_height) // 2
+        
+        for y, row in enumerate(piece):
+            for x, cell in enumerate(row):
+                if cell == '#':
+                    rect = pygame.Rect(
+                        sidebar_x + offset_x + x * preview_size,
+                        next_y + offset_y + y * preview_size,
+                        preview_size,
+                        preview_size
+                    )
+                    pygame.draw.rect(self.screen, color, rect)
+                    pygame.draw.rect(self.screen, (128, 128, 128), rect, 1)
+    
     def draw_ui(self):
         # Draw sidebar with game info
         sidebar_x = self.board_width + 10
@@ -260,6 +309,9 @@ class Tetris:
             True, (150, 150, 150)
         )
         self.screen.blit(datetime_text, (10, self.screen_height - 30))
+        
+        # Draw next piece preview
+        self.draw_next_piece()
     
     def game_over(self):
         return not self.can_move(0, 0)
@@ -342,10 +394,7 @@ class Tetris:
                 else:
                     self.place_piece()
                     self.clear_lines()
-                    self.current_piece = self.get_new_piece()
-                    self.current_x = self.width // 2 - 2
-                    self.current_y = 0
-                    self.current_rotation = 0
+                    self.spawn_next_piece()
                 self.fall_time = 0
             
             # Draw everything
